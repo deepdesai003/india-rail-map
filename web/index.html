@@ -1,0 +1,556 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>India Rail Route Map</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Raleway&family=Inter:wght@400;500;600;700&display=swap">
+<link rel="stylesheet" href="leaflet.css">
+<style>
+/* Layout: full-height map app. Prussian header band, search + picked-trains panel on the left (bottom sheet on phones), network canvas fills the rest. */
+:root {
+  --mp-prussian:#002E42; --mp-honolulu:#0A7CC3; --mp-honolulu-a11y:#0974B6; --mp-cadet:#201E50; --mp-magenta:#952498; --mp-antiflash:#EEEEEE;
+  --mp-p-92:#EBEEF0; --mp-p-80:#CCD5D9; --mp-p-55:#8CA1AA; --mp-p-deep:#002332;
+  --mp-h-92:#EBF5FA; --mp-h-80:#CEE5F3; --mp-h-55:#91C4E4; --mp-h-deep:#085D92;
+  --mp-n-50:#F7F8F9; --mp-n-100:#EEEEEE; --mp-n-200:#DDE1E3; --mp-n-300:#C4CACE; --mp-n-400:#98A1A7; --mp-n-500:#6E787E; --mp-n-600:#4A5358; --mp-n-700:#333333; --mp-n-900:#1A1A1A;
+  --mp-font-heading:'Raleway','Century Gothic','Futura',Verdana,sans-serif;
+  --mp-font-body:'Inter','Helvetica Neue',Helvetica,Arial,sans-serif;
+  --mp-space-1:4px; --mp-space-2:8px; --mp-space-3:12px; --mp-space-4:16px; --mp-space-5:20px; --mp-space-6:24px;
+  --mp-radius-sm:4px; --mp-radius-md:8px; --mp-radius-pill:999px;
+
+  /* semantic tokens (light) */
+  --bg:#FFFFFF; --panel:#FFFFFF; --panel-2:var(--mp-n-50); --fg:var(--mp-n-700); --fg-2:var(--mp-n-600); --muted:var(--mp-n-500);
+  --rule:var(--mp-n-200); --heading:var(--mp-prussian); --link:var(--mp-honolulu-a11y);
+  --map-bg:#DCE9F1; --land-out:#EEF0F1; --land:#FCFCFB; --state-line:#C9D2D7; --border:#7F939C; --river:#BBD6E6; --city:#2C3E47; --halo:#FCFCFB; --track:#B3BEC4; --track-busy:#5E7884; --label:#97A8B0; --station:#6E787E; --casing:#FFFFFF;
+  --input-bg:#FFFFFF; --hover:var(--mp-h-92);
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg:var(--mp-p-deep); --panel:#04293A; --panel-2:#0A3347; --fg:#E6ECEF; --fg-2:var(--mp-p-80); --muted:#9FB2BB;
+  --rule:#1D4659; --heading:#FFFFFF; --link:var(--mp-h-55);
+  --map-bg:#00141E; --land-out:#06222F; --land:#022C3F; --state-line:#174559; --border:#6F96A8; --river:#0E4560; --city:#D5E0E5; --halo:#022C3F; --track:#2F5A6E; --track-busy:#7FA6B8; --label:#5F8494; --station:#9FB2BB; --casing:#022C3F;
+  --input-bg:#002332; --hover:#0D3A50; color-scheme:dark } }
+:root[data-theme="dark"] {
+  --bg:var(--mp-p-deep); --panel:#04293A; --panel-2:#0A3347; --fg:#E6ECEF; --fg-2:var(--mp-p-80); --muted:#9FB2BB;
+  --rule:#1D4659; --heading:#FFFFFF; --link:var(--mp-h-55);
+  --map-bg:#00141E; --land-out:#06222F; --land:#022C3F; --state-line:#174559; --border:#6F96A8; --river:#0E4560; --city:#D5E0E5; --halo:#022C3F; --track:#2F5A6E; --track-busy:#7FA6B8; --label:#5F8494; --station:#9FB2BB; --casing:#022C3F;
+  --input-bg:#002332; --hover:#0D3A50; color-scheme:dark }
+
+[hidden] { display:none !important; }
+:root { padding-top:env(safe-area-inset-top,0px); }
+body { margin:0; }
+html, body { height:100%; }
+body { background:var(--bg); color:var(--fg); font-family:var(--mp-font-body); font-size:14px; line-height:1.5; }
+body::before { content:""; position:fixed; inset:0 0 auto; height:env(safe-area-inset-top,0px); z-index:10; background:var(--mp-prussian); }
+.app { height:100%; display:grid; grid-template-rows:auto 1fr; }
+header { background:var(--mp-prussian); border-top:6px solid var(--mp-honolulu); color:#fff;
+  padding-block:var(--mp-space-3); padding-left:max(16px, env(safe-area-inset-left,0px)); padding-right:max(16px, env(safe-area-inset-right,0px));
+  display:flex; align-items:center; gap:var(--mp-space-4); }
+.hgroup { min-width:0; }
+.eyebrow { font-family:var(--mp-font-heading); font-size:12px; line-height:16px; letter-spacing:.08em; text-transform:uppercase; color:var(--mp-h-55); }
+h1 { margin:0; font-family:var(--mp-font-heading); font-weight:400; font-size:22px; line-height:30px; color:#fff; text-wrap:balance; }
+.hstats { margin-left:auto; color:var(--mp-p-80); font-size:12px; text-align:right; font-variant-numeric:tabular-nums; }
+.hstats b { color:#fff; font-weight:600; }
+
+main { min-height:0; display:grid; grid-template-columns:360px 1fr; }
+aside { position:relative; z-index:1100; min-height:0; display:flex; flex-direction:column; background:var(--panel); border-right:1px solid var(--rule); }
+#map { min-height:0; background:var(--map-bg); }
+.leaflet-container { background:var(--map-bg); font-family:var(--mp-font-body); }
+
+.search { position:relative; padding:var(--mp-space-4); border-bottom:1px solid var(--rule); }
+.search label { display:block; font-size:12px; font-weight:600; letter-spacing:.08em; text-transform:uppercase; color:var(--muted); margin-bottom:var(--mp-space-2); }
+#q { width:100%; box-sizing:border-box; font:16px/1.4 var(--mp-font-body); color:var(--fg); background:var(--input-bg);
+  border:1.5px solid var(--mp-n-300); border-radius:var(--mp-radius-sm); padding:10px 12px; }
+#q:focus { outline:none; border-color:var(--mp-honolulu); box-shadow:0 0 0 3px color-mix(in srgb, var(--mp-honolulu) 25%, transparent); }
+#results { position:absolute; left:var(--mp-space-4); right:var(--mp-space-4); top:calc(100% - 8px); z-index:1000; margin:0; padding:0; list-style:none;
+  background:var(--panel); border:1px solid var(--rule); border-radius:var(--mp-radius-sm); max-height:min(380px, 50vh); overflow:auto; box-shadow:0 8px 24px rgba(0,30,45,.18); }
+#results li { padding:10px 12px; cursor:pointer; border-bottom:1px solid var(--rule); display:grid; grid-template-columns:auto 1fr; gap:2px 10px; }
+#results li:last-child { border-bottom:0; }
+#results li[aria-selected="true"], #results li:hover { background:var(--hover); }
+#results .no { font-weight:700; font-variant-numeric:tabular-nums; color:var(--heading); }
+#results .nm { font-weight:500; min-width:0; overflow-wrap:anywhere; }
+#results .rt { grid-column:2; color:var(--muted); font-size:12px; }
+#results .picked { color:var(--link); font-size:12px; font-weight:600; }
+#results .empty { display:block; color:var(--muted); cursor:default; }
+mark { background:transparent; color:var(--link); font-weight:700; }
+
+.list-head { display:flex; align-items:baseline; justify-content:space-between; padding:var(--mp-space-3) var(--mp-space-4) var(--mp-space-2); }
+.list-head h2 { margin:0; font-family:var(--mp-font-heading); font-weight:400; font-size:18px; line-height:24px; color:var(--heading); }
+.ghost { background:none; border:0; color:var(--link); font:600 13px var(--mp-font-body); cursor:pointer; padding:4px 6px; border-radius:var(--mp-radius-sm); }
+.ghost:hover { background:var(--hover); }
+.ghost:focus-visible, .icon-btn:focus-visible, .card:focus-visible { outline:2px solid var(--mp-honolulu); outline-offset:2px; }
+#picked { flex:1; min-height:0; overflow:auto; padding:0 var(--mp-space-4) var(--mp-space-4); display:flex; flex-direction:column; gap:var(--mp-space-2); }
+.empty-state { color:var(--muted); padding:var(--mp-space-4) 0; }
+.card { border:1px solid var(--rule); border-radius:var(--mp-radius-md); background:var(--panel); padding:var(--mp-space-3); display:grid; grid-template-columns:6px 1fr auto; gap:var(--mp-space-1) var(--mp-space-3); }
+.card.active { border-color:var(--c); box-shadow:0 0 0 1px var(--c); }
+.swatch { grid-row:1 / span 3; background:var(--c); border-radius:var(--mp-radius-pill); }
+.card .title { min-width:0; font-weight:600; color:var(--heading); overflow-wrap:anywhere; }
+.card .title .num { font-variant-numeric:tabular-nums; margin-right:6px; }
+.card .meta { grid-column:2; color:var(--fg-2); font-size:13px; min-width:0; }
+.card .facts { grid-column:2 / span 2; display:flex; flex-wrap:wrap; gap:4px 12px; color:var(--muted); font-size:12px; font-variant-numeric:tabular-nums; }
+.tag { display:inline-block; padding:0 8px; border-radius:var(--mp-radius-pill); background:var(--panel-2); color:var(--fg-2); font-size:11px; font-weight:600; letter-spacing:.04em; }
+.actions { display:flex; gap:2px; align-items:start; }
+.icon-btn { width:30px; height:30px; display:grid; place-items:center; border:0; background:none; border-radius:var(--mp-radius-sm); color:var(--fg-2); cursor:pointer; }
+.icon-btn:hover { background:var(--hover); color:var(--fg); }
+.icon-btn svg { width:16px; height:16px; }
+details.stops { grid-column:2 / span 2; }
+details.stops summary { cursor:pointer; color:var(--link); font-size:12px; font-weight:600; }
+.stoplist { margin:6px 0 0; padding:0; list-style:none; max-height:260px; overflow:auto; border-top:1px solid var(--rule); }
+.stoplist li { display:grid; grid-template-columns:14px 1fr auto; gap:8px; padding:4px 0; border-bottom:1px solid var(--rule); font-size:12px; cursor:pointer; }
+.stoplist li:hover { background:var(--hover); }
+.stoplist .dot { width:8px; height:8px; margin-top:5px; border-radius:50%; background:var(--c); }
+.stoplist .t { color:var(--muted); font-variant-numeric:tabular-nums; white-space:nowrap; }
+.stoplist .code { color:var(--muted); font-size:11px; margin-left:4px; }
+.foot { padding:var(--mp-space-3) var(--mp-space-4); border-top:1px solid var(--rule); color:var(--muted); font-size:12px; }
+.foot a { color:var(--link); }
+.legend { display:flex; gap:var(--mp-space-4); flex-wrap:wrap; margin-bottom:4px; }
+.legend span::before { content:""; display:inline-block; width:18px; height:0; border-top:2px solid var(--fg-2); vertical-align:middle; margin-right:6px; }
+.legend span.thin::before { border-top:1px solid var(--muted); }
+
+.leaflet-tooltip.tip { background:var(--panel); color:var(--fg); border:1px solid var(--rule); border-radius:var(--mp-radius-sm); font:12px/1.4 var(--mp-font-body); box-shadow:0 4px 12px rgba(0,30,45,.15); }
+.leaflet-tooltip.tip b { color:var(--heading); }
+.leaflet-tooltip-top.tip::before { border-top-color:var(--rule); }
+.leaflet-bar a { background:var(--panel); color:var(--fg); border-bottom-color:var(--rule); }
+.leaflet-bar a:hover { background:var(--hover); }
+.leaflet-control-attribution { background:color-mix(in srgb, var(--panel) 85%, transparent) !important; color:var(--muted); }
+.leaflet-control-attribution a { color:var(--link); }
+.loading { position:absolute; inset:0; display:grid; place-items:center; text-align:center; padding:24px; line-height:1.4; color:var(--muted); z-index:500; pointer-events:none; font-family:var(--mp-font-heading); font-size:18px; }
+.map-wrap { position:relative; min-height:0; display:grid; }
+
+.st-label { background:none; border:0; box-shadow:none; padding:0 0 0 6px; color:var(--st-fg, #333); font:500 11px var(--mp-font-body); white-space:nowrap;
+  text-shadow:0 0 2px var(--halo), 0 0 2px var(--halo), 0 0 3px var(--halo); }
+.st-label.on-route { color:var(--st-fg-strong, #111); font-weight:600; }
+.st-label::before { display:none; }
+.modes { display:flex; background:var(--panel); border:1px solid var(--rule); border-radius:var(--mp-radius-sm); overflow:hidden; box-shadow:0 1px 4px rgba(0,30,45,.15); }
+.modes button { border:0; background:none; color:var(--fg-2); font:600 12px var(--mp-font-body); padding:7px 12px; cursor:pointer; }
+.basemaps { margin-top:8px !important; }
+.modes button[aria-pressed="true"] { background:var(--mp-prussian); color:#fff; }
+.modes button:focus-visible { outline:2px solid var(--mp-honolulu); outline-offset:-2px; }
+.speed-legend { background:var(--panel); border:1px solid var(--rule); border-radius:var(--mp-radius-sm); padding:8px 10px; font-size:11px; color:var(--fg-2); box-shadow:0 1px 4px rgba(0,30,45,.15); max-width:220px; }
+.speed-legend b { display:block; color:var(--heading); font-size:12px; margin-bottom:4px; }
+.speed-legend .row { display:flex; align-items:center; gap:8px; font-variant-numeric:tabular-nums; }
+.speed-legend .row i { display:inline-block; width:22px; height:0; border-top:3px solid; }
+.speed-legend p { margin:6px 0 0; color:var(--muted); line-height:1.35; }
+#results .kind { font-size:10px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--muted); }
+#results li.stn .no { color:var(--link); }
+.pop h3 { margin:0; font:400 18px/24px var(--mp-font-heading); color:var(--heading); }
+.pop .sub { color:var(--muted); font-size:12px; margin-bottom:6px; }
+.pop ul { list-style:none; margin:0; padding:0; max-height:220px; overflow:auto; border-top:1px solid var(--rule); }
+.pop li { border-bottom:1px solid var(--rule); }
+.pop li button { width:100%; text-align:left; border:0; background:none; padding:5px 2px; font:12px var(--mp-font-body); color:var(--fg); cursor:pointer; display:flex; gap:8px; }
+.pop li button:hover { background:var(--hover); }
+.pop li button b { color:var(--heading); font-variant-numeric:tabular-nums; }
+.pop li button .on { margin-left:auto; color:var(--link); font-weight:600; }
+.leaflet-popup-content-wrapper, .leaflet-popup-tip { background:var(--panel); color:var(--fg); }
+.leaflet-popup-content { margin:12px 14px; width:260px !important; max-width:70vw; }
+.leaflet-container a.leaflet-popup-close-button { color:var(--muted); }
+
+@media (max-width: 760px) {
+  header { gap:var(--mp-space-3); }
+  .hstats { display:none; }
+  h1 { font-size:18px; line-height:24px; }
+  main { grid-template-columns:1fr; grid-template-rows:minmax(0,1fr) minmax(0, 46%); }
+  .map-wrap { grid-row:1; }
+  aside { grid-row:2; border-right:0; border-top:1px solid var(--rule); }
+  .foot { padding-bottom:calc(var(--mp-space-3) + env(safe-area-inset-bottom,0px)); }
+  .search { padding-block:var(--mp-space-3); }
+  .search label { display:none; }
+  .legend { display:none; }
+  .speed-legend p { display:none; }
+  .foot { font-size:11px; padding-top:var(--mp-space-2); }
+  #results { top:auto; bottom:calc(100% - 4px); }
+}
+@media (prefers-reduced-motion: reduce) { * { transition:none !important; animation:none !important; } }
+</style>
+
+</head>
+<body>
+<div class="app">
+  <header>
+    <div class="hgroup">
+      <div class="eyebrow">Indian Railways network</div>
+      <h1>India Rail Route Map</h1>
+    </div>
+    <div class="hstats" id="hstats">Loading network…</div>
+  </header>
+  <main>
+    <aside>
+      <div class="search">
+        <label for="q">Find a train or station</label>
+        <input id="q" type="search" placeholder="Train, number or station, e.g. 12951, Rajdhani, NDLS" autocomplete="off" spellcheck="false"
+          role="combobox" aria-expanded="false" aria-controls="results" aria-autocomplete="list">
+        <ul id="results" role="listbox" hidden></ul>
+      </div>
+      <div class="list-head">
+        <h2>Picked trains <span id="count" class="tag">0</span></h2>
+        <button class="ghost" id="clear" type="button">Clear all</button>
+      </div>
+      <div id="picked"></div>
+      <div class="foot">
+        <div class="legend"><span>Busy corridor</span><span class="thin">Other line</span></div>
+        Lines join consecutive stops in a straight line, so curves are simplified. Train data: <a href="https://github.com/datameet/railways" target="_blank" rel="noopener">DataMeet Indian Railways dataset</a> (2016); timetables may have changed since. Map tiles © OpenStreetMap contributors and CARTO; satellite imagery © Esri. Boundaries on the tiles come from those providers and may differ from the Survey of India map.
+      </div>
+    </aside>
+    <div class="map-wrap"><div id="map"></div><div class="loading" id="loading">Loading the rail network…</div></div>
+  </main>
+</div>
+
+<script>window.addEventListener('error', function(e){ var l = document.getElementById('loading'); if (l && !l.hidden) l.textContent = 'The map could not start (' + (e.message || 'script error') + '). Reload the page to try again.'; });</script>
+<script src="leaflet.js"></script>
+<script>
+(function(){
+const TYPES = {Pass:'Passenger',Exp:'Express',SF:'Superfast',MEMU:'MEMU',DEMU:'DEMU',Hyd:'MMTS Hyderabad',GR:'Garib Rath',Raj:'Rajdhani',Drnt:'Duronto',SKr:'Sampark Kranti',JShtb:'Jan Shatabdi',Shtb:'Shatabdi',Mail:'Mail',Toy:'Toy train',Del:'Delhi suburban',Klkt:'Kolkata suburban'};
+const PALETTE = ['#D9480F','#2B8A3E','#7048E8','#C2255C','#E67700','#0C8599','#952498','#1971C2','#5C940D','#A61E4D','#B08900','#495057'];
+const EXAMPLES = ['12951','12302'];
+const $ = s => document.querySelector(s);
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const hhmm = m => m === '' || m == null ? '' : String(Math.floor(m/60)%24).padStart(2,'0')+':'+String(m%60).padStart(2,'0');
+const store = { get(k){ try { return JSON.parse(localStorage.getItem(k)); } catch(e){ return null; } }, set(k,v){ try { localStorage.setItem(k, JSON.stringify(v)); } catch(e){} } };
+
+const map = L.map('map', { preferCanvas:true, zoomSnap:0.25, minZoom:4, maxZoom:17, attributionControl:true, worldCopyJump:false })
+  .setView([22.6, 80.5], 5);
+map.attributionControl.setPrefix(false).addAttribution('Rail data © <a href="https://github.com/datameet/railways" target="_blank" rel="noopener">DataMeet</a>');
+const TILES = {
+  map: [L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', { subdomains:'abcd', maxZoom:19,
+    attribution:'© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors © <a href="https://carto.com/attributions" target="_blank" rel="noopener">CARTO</a>' })],
+  sat: [L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxZoom:19,
+    attribution:'Imagery © <a href="https://www.esri.com" target="_blank" rel="noopener">Esri</a>, Maxar, Earthstar Geographics' }),
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager_only_labels/{z}/{x}/{y}{r}.png', { subdomains:'abcd', maxZoom:19, attribution:'Labels © CARTO' })]
+};
+const MAPVARS = {
+  map: { '--track':'#7D8B93', '--track-busy':'#2F4550', '--station':'#3F5560', '--casing':'#FFFFFF', '--halo':'#FFFFFF', '--st-fg':'#2B3A42', '--st-fg-strong':'#0B1A22', '--map-bg':'#F2EFE9' },
+  sat: { '--track':'#D9DEE1', '--track-busy':'#FFFFFF', '--station':'#FFFFFF', '--casing':'#111111', '--halo':'#000000', '--st-fg':'#F1F3F5', '--st-fg-strong':'#FFFFFF', '--map-bg':'#1B2328' }
+};
+let basemap = store.get('irm-basemap') === 'sat' ? 'sat' : 'map';
+function setBasemap(b){
+  basemap = b; store.set('irm-basemap', b);
+  Object.values(TILES).flat().forEach(l => map.removeLayer(l));
+  TILES[b].forEach(l => l.addTo(map));
+  for (const [k, v] of Object.entries(MAPVARS[b])) document.documentElement.style.setProperty(k, v);
+  document.querySelectorAll('.basemaps button').forEach(x => x.setAttribute('aria-pressed', String(x.dataset.b === b)));
+  if (typeof retheme === 'function') retheme();
+}
+const BaseCtl = L.Control.extend({ options:{ position:'topright' }, onAdd(){
+  const d = L.DomUtil.create('div', 'modes basemaps'); d.setAttribute('role','group'); d.setAttribute('aria-label','Base map');
+  d.innerHTML = '<button type="button" data-b="map">Map</button><button type="button" data-b="sat">Satellite</button>';
+  L.DomEvent.disableClickPropagation(d);
+  d.addEventListener('click', e => { const b = e.target.closest('button')?.dataset.b; if (b) setBasemap(b); });
+  return d; } });
+const fitIndia = () => map.fitBounds([[7.5, 68.5],[35.5, 97]], { padding:[8,8] });
+fitIndia();
+map.createPane('labels'); map.getPane('labels').style.zIndex = 460; map.getPane('labels').style.pointerEvents = 'none';
+map.createPane('net'); map.getPane('net').style.zIndex = 350;
+map.createPane('routes'); map.getPane('routes').style.zIndex = 420;
+map.createPane('stops'); map.getPane('stops').style.zIndex = 440;
+const netR = L.canvas({ pane:'net', padding:0.4 });
+const routeR = L.canvas({ pane:'routes', padding:0.4 });
+const stopR = L.canvas({ pane:'stops', padding:0.4 });
+
+let TRAINS = [], BYNO = new Map(), ST = {}, netLayers = [], stationLayer = null;
+const picked = new Map(); // no -> {train, color, layers, stops}
+let activeNo = null;
+const shards = {};
+
+function decode(g){ const out=[]; let x=0,y=0; for(let i=0;i<g.length;i+=2){ x+=g[i]; y+=g[i+1]; out.push([y/1e4, x/1e4]); } return out; }
+
+const BANDS = [[0,50,'#A3B3BB','Under 50',1],[50,80,'#E3A008','50–80',1.5],[80,100,'#E8590C','80–100',2],[100,120,'#C2255C','100–120',2.4],[120,999,'#6741D9','120 and above',2.8]];
+let mode = store.get('irm-mode') === 'speed' ? 'speed' : 'net';
+function drawSpeed(sp){
+  const groups = BANDS.map(() => []);
+  for (let i=0;i<sp.length;i+=5){
+    const v = sp[i+4], b = BANDS.findIndex(x => v >= x[0] && v < x[1]);
+    groups[b].push([[sp[i+1]/1e4, sp[i]/1e4],[sp[i+3]/1e4, sp[i+2]/1e4]]);
+  }
+  netLayers = groups.map((g, b) => L.polyline(g, { renderer:netR, color:BANDS[b][2], weight:BANDS[b][4], opacity:1, interactive:false }));
+  netLayers.forEach(l => l.addTo(map));
+}
+function drawNetwork(net){
+  netLayers.forEach(l => map.removeLayer(l)); netLayers = [];
+  if (mode === 'speed' && window.__speed) return drawSpeed(window.__speed);
+  const busy=[], thin=[];
+  for (let i=0;i<net.length;i+=5){
+    const seg=[[net[i+1]/1e4, net[i]/1e4],[net[i+3]/1e4, net[i+2]/1e4]];
+    (net[i+4] >= 12 ? busy : thin).push(seg);
+  }
+  netLayers = [
+    L.polyline(thin, { renderer:netR, color:css('--track'), weight:1, opacity:1, interactive:false }),
+    L.polyline(busy, { renderer:netR, color:css('--track-busy'), weight:1.6, opacity:1, interactive:false })
+  ];
+  netLayers.forEach(l => l.addTo(map));
+}
+
+function buildStations(){
+  const pts = [];
+  for (const [code, v] of Object.entries(ST)) if (v.length >= 4) pts.push(L.circleMarker([v[3], v[2]], { renderer:netR, radius:2, stroke:false, fillColor:css('--station'), fillOpacity:.9 })
+    .bindTooltip(`<b>${esc(v[0])}</b> · ${esc(code)}<br>${esc(v[1])}`, { className:'tip', direction:'top', offset:[0,-3] }).on('click', () => showStation(code)));
+  stationLayer = L.layerGroup(pts);
+}
+function zoomLayers(){
+  const z = map.getZoom();
+  if (stationLayer){ if (z >= 8.5) stationLayer.addTo(map); else map.removeLayer(stationLayer); }
+  for (const p of picked.values()) if (p.midLayer){ if (z >= 7) p.midLayer.addTo(map); else map.removeLayer(p.midLayer); }
+}
+map.on('zoomend', zoomLayers);
+
+// station labels, refreshed for the visible area
+const labelCache = new Map(); let labelGroup = L.layerGroup().addTo(map);
+function forcedCodes(){ const s = new Set(); for (const p of picked.values()) (p.stops||[]).forEach(x => s.add(x.c)); return s; }
+function refreshLabels(){
+  const z = map.getZoom(); labelGroup.clearLayers();
+  if (z < 8) return;
+  const b = map.getBounds().pad(0.1), forced = z >= 8.5 ? forcedCodes() : new Set();
+  const min = z >= 11 ? 0 : z >= 10.25 ? 15 : z >= 9.5 ? 50 : 140;
+  const cand = [];
+  for (const [code, v] of Object.entries(ST)){
+    if (v.length < 4) continue;
+    const f = forced.has(code);
+    if (!f && !(z >= 9 && (v[4]||0) >= min)) continue;
+    if (!b.contains([v[3], v[2]])) continue;
+    cand.push([f ? 1e6 + (v[4]||0) : (v[4]||0), code, v, f]);
+  }
+  cand.sort((a,b) => b[0]-a[0]);
+  const boxes = []; let n = 0;
+  for (const [, code, v, f] of cand){
+    if (n >= 260) break;
+    const pt = map.latLngToContainerPoint([v[3], v[2]]);
+    const bx = [pt.x + 4, pt.y - 8, pt.x + 10 + v[0].length * (f ? 6.6 : 6.1), pt.y + 8];
+    if (boxes.some(o => bx[0] < o[2] && bx[2] > o[0] && bx[1] < o[3] && bx[3] > o[1])) continue;
+    boxes.push(bx); n++;
+    const key = code + (f ? '*' : '');
+    let t = labelCache.get(key);
+    if (!t){ t = L.tooltip({ permanent:true, direction:'right', className:'st-label' + (f ? ' on-route' : ''), interactive:false, pane:'labels', offset:[2,0] }).setLatLng([v[3], v[2]]).setContent(esc(v[0])); labelCache.set(key, t); }
+    labelGroup.addLayer(t);
+  }
+}
+map.on('moveend', refreshLabels);
+
+// mode switch + speed legend
+const ModeCtl = L.Control.extend({ options:{ position:'topright' }, onAdd(){
+  const d = L.DomUtil.create('div', 'modes'); d.setAttribute('role','group'); d.setAttribute('aria-label','Line colouring');
+  d.innerHTML = '<button type="button" data-m="net">Network</button><button type="button" data-m="speed">Track speed</button>';
+  L.DomEvent.disableClickPropagation(d);
+  d.addEventListener('click', e => { const m = e.target.closest('button')?.dataset.m; if (m) setMode(m); });
+  return d; } });
+const LegendCtl = L.Control.extend({ options:{ position:'bottomleft' }, onAdd(){
+  const d = L.DomUtil.create('div', 'speed-legend');
+  d.innerHTML = '<b>Fastest scheduled speed, km/h</b>' + BANDS.map(b => `<div class="row"><i style="border-color:${b[2]};border-top-width:${b[4]+1}px"></i>${b[3]}</div>`).join('') +
+    '<p>Estimated from timetables: the fastest train between each pair of stops. Real line speed limits can be higher.</p>';
+  L.DomEvent.disableClickPropagation(d); return d; } });
+new ModeCtl().addTo(map);
+new BaseCtl().addTo(map);
+setBasemap(basemap);
+const legend = new LegendCtl();
+function setMode(m){
+  mode = m; store.set('irm-mode', m);
+  document.querySelectorAll('.modes button[data-m]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.m === m)));
+  if (m === 'speed') legend.addTo(map); else legend.remove();
+  document.querySelector('.legend').hidden = m === 'speed';
+  if (window.__net) drawNetwork(window.__net);
+}
+
+// ---------- search ----------
+const q = $('#q'), res = $('#results');
+let hits = [], sel = -1;
+function norm(s){ return s.toLowerCase().replace(/[^a-z0-9 ]/g,' '); }
+function search(text){
+  const t = norm(text).trim(); if (!t) return [];
+  const toks = t.split(/\s+/);
+  const out = [];
+  for (const tr of TRAINS){
+    let score = 0;
+    if (tr.no === t) score = 100; else if (tr.no.startsWith(t)) score = 80;
+    else if (toks.every(k => tr._s.includes(k))) score = tr._n.startsWith(toks[0]) ? 50 : 30;
+    if (score) out.push([score, tr]);
+  }
+  out.sort((a,b) => b[0]-a[0] || a[1].no.localeCompare(b[1].no));
+  const tr = out.slice(0, 40).map(x => ({ k:'t', t:x[1], sc:x[0] }));
+  const sts = [];
+  if (t.length >= 2) for (const [code, v] of Object.entries(ST)){
+    if (v.length < 4) continue;
+    const nm = norm(v[0]); let sc = 0;
+    if (code.toLowerCase() === t) sc = 95; else if (nm.startsWith(t)) sc = 60; else if (toks.every(k => nm.includes(k))) sc = 35;
+    if (sc) sts.push({ k:'s', code, v, sc: sc + Math.min(9, (v[4]||0)/40) });
+  }
+  sts.sort((a,b) => b.sc - a.sc);
+  const top = sts.slice(0, 6);
+  return [...top.filter(x => x.sc >= 95), ...tr.filter(x => x.sc >= 80), ...top.filter(x => x.sc < 95), ...tr.filter(x => x.sc < 80)].slice(0, 40);
+}
+function hl(s, text){
+  const toks = norm(text).trim().split(/\s+/).filter(Boolean); let h = esc(s);
+  toks.forEach(k => { if (k.length > 1 || /\d/.test(k)) h = h.replace(new RegExp('('+k.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+')','ig'), '<mark>$1</mark>'); });
+  return h;
+}
+function renderResults(){
+  if (!q.value.trim()){ res.hidden = true; q.setAttribute('aria-expanded','false'); return; }
+  res.innerHTML = hits.length ? hits.map((h,i) => h.k === 's'
+    ? `<li role="option" id="r${i}" class="stn" data-i="${i}" aria-selected="${i===sel}">
+      <span class="no">${hl(h.code, q.value)}</span><span class="nm">${hl(h.v[0], q.value)}</span>
+      <span class="rt"><span class="kind">Station</span> · ${esc(h.v[1])}${h.v[4] ? ' · ' + h.v[4] + ' trains' : ''}</span></li>`
+    : `<li role="option" id="r${i}" data-i="${i}" aria-selected="${i===sel}">
+    <span class="no">${hl(h.t.no, q.value)}</span><span class="nm">${hl(h.t.nm, q.value)} ${picked.has(h.t.no)?'<span class="picked">· on map</span>':''}</span>
+    <span class="rt">${esc(h.t.fr)} → ${esc(h.t.to)} · ${esc(TYPES[h.t.ty]||h.t.ty||'Train')}</span></li>`).join('')
+    : `<li class="empty">Nothing matches “${esc(q.value)}”. Try a 5-digit train number, a station code, or one word of a name.</li>`;
+  res.hidden = false; q.setAttribute('aria-expanded','true');
+  if (sel >= 0) { q.setAttribute('aria-activedescendant','r'+sel); res.querySelector('#r'+sel)?.scrollIntoView({block:'nearest'}); }
+}
+q.addEventListener('input', () => { hits = search(q.value); sel = hits.length ? 0 : -1; renderResults(); });
+q.addEventListener('keydown', e => {
+  if (e.key === 'ArrowDown'){ sel = Math.min(hits.length-1, sel+1); renderResults(); e.preventDefault(); }
+  else if (e.key === 'ArrowUp'){ sel = Math.max(0, sel-1); renderResults(); e.preventDefault(); }
+  else if (e.key === 'Enter' && hits[sel]){ choose(hits[sel]); e.preventDefault(); }
+  else if (e.key === 'Escape'){ res.hidden = true; }
+});
+q.addEventListener('focus', () => { if (q.value.trim()) renderResults(); });
+res.addEventListener('mousedown', e => { const li = e.target.closest('li[data-i]'); if (li){ e.preventDefault(); choose(hits[+li.dataset.i]); } });
+document.addEventListener('click', e => { if (!e.target.closest('.search')) res.hidden = true; });
+let STIDX = null;
+const getStidx = () => STIDX || (STIDX = fetch('stidx.json').then(r => r.json()).catch(() => ({})));
+let stPopup = null;
+async function showStation(code){
+  const v = ST[code]; if (!v || v.length < 4) return;
+  map.setView([v[3], v[2]], Math.max(map.getZoom(), 11));
+  const body = nos => `<div class="pop"><h3>${esc(v[0])}</h3><div class="sub">${[esc(code), esc(v[1]), nos ? nos.length + ' trains stop here' : ''].filter(Boolean).join(' · ')}</div>` +
+    (nos ? `<ul>${nos.map(no => BYNO.get(no)).filter(Boolean).sort((a,b) => a.no.localeCompare(b.no)).map(t => `<li><button type="button" class="pop-train" data-no="${esc(t.no)}"><b>${esc(t.no)}</b><span>${esc(t.nm)}</span>${picked.has(t.no) ? '<span class="on">on map</span>' : ''}</button></li>`).join('')}</ul>` : '<div class="sub">Loading trains…</div>') + '</div>';
+  stPopup = L.popup({ maxWidth:300, autoPanPadding:[20,20] }).setLatLng([v[3], v[2]]).setContent(body(null)).openOn(map);
+  const nos = (await getStidx())[code] || [];
+  if (stPopup.isOpen()) stPopup.setContent(body(nos));
+}
+document.addEventListener('click', e => { const b = e.target.closest('.pop-train'); if (!b) return; map.closePopup(); choose({ k:'t', t:BYNO.get(b.dataset.no) }); });
+function choose(h){
+  if (!h) return;
+  if (h.k === 's') showStation(h.code);
+  else { const no = h.t.no; if (picked.has(no)) focusTrain(no); else addTrain(no, true); }
+  q.value = ''; hits = []; res.hidden = true; q.setAttribute('aria-expanded','false');
+  if (matchMedia('(max-width:760px)').matches) q.blur();
+}
+
+// ---------- picked trains ----------
+function nextColor(){
+  const used = new Set([...picked.values()].map(p => p.color));
+  const free = PALETTE.find(c => !used.has(c));
+  if (free) return free;
+  const h = (picked.size * 137.508) % 360; return `hsl(${h.toFixed(0)} 70% 42%)`;
+}
+async function loadStops(no){
+  const k = parseInt(no.replace(/\D/g,'') || '0', 10) % 32;
+  if (!shards[k]) shards[k] = fetch(`stops/s${k}.json`).then(r => r.json()).catch(() => ({}));
+  const s = (await shards[k])[no];
+  if (!s) return [];
+  return s.split(';').map(x => { const [c,a,d,dy] = x.split(','); return { c, a: a===''?'':+a, d: d===''?'':+d, day:+dy }; });
+}
+async function addTrain(no, focus, color){
+  const t = BYNO.get(no); if (!t || picked.has(no)) return;
+  const c = color || nextColor();
+  const ll = decode(t.g);
+  const casing = L.polyline(ll, { renderer:routeR, color:css('--casing'), weight:7, opacity:.9, interactive:false });
+  const line = L.polyline(ll, { renderer:routeR, color:c, weight:4, opacity:1, lineJoin:'round' })
+    .bindTooltip(`<b>${esc(t.no)} ${esc(t.nm)}</b><br>${esc(t.fr)} → ${esc(t.to)}`, { className:'tip', sticky:true })
+    .on('click', () => focusTrain(no, false));
+  const p = { train:t, color:c, layers:[casing, line], stopLayer:null, stops:null, ll };
+  picked.set(no, p);
+  casing.addTo(map); line.addTo(map);
+  renderPicked(); save();
+  if (focus) focusTrain(no);
+  p.stops = await loadStops(no);
+  if (!picked.has(no)) return;
+  const marks = [], mids = [];
+  p.stops.forEach((s, i) => { const v = ST[s.c]; if (!v || v.length < 4) return;
+    const end = i === 0 || i === p.stops.length-1;
+    (end ? marks : mids).push(L.circleMarker([v[3], v[2]], { renderer:stopR, radius: end ? 5 : 3, color:c, weight: end ? 2.5 : 1.5, fillColor: end ? c : css('--casing'), fillOpacity:1 })
+      .bindTooltip(`<b>${esc(v[0])}</b> · ${esc(s.c)}<br>${esc(t.no)} ${esc(t.nm)}<br>${stopTimes(s)}`, { className:'tip', direction:'top', offset:[0,-4] }).on('click', () => showStation(s.c))); });
+  p.stopLayer = L.layerGroup(marks).addTo(map);
+  p.midLayer = L.layerGroup(mids); if (map.getZoom() >= 7) p.midLayer.addTo(map);
+  refreshLabels();
+  renderPicked();
+}
+function stopTimes(s){
+  const a = hhmm(s.a), d = hhmm(s.d);
+  const day = s.day > 1 ? ` · day ${s.day}` : '';
+  if (a && d && a !== d) return `Arr ${a} · Dep ${d}${day}`;
+  if (!a && d) return `Starts ${d}${day}`;
+  if (a && !d) return `Ends ${a}${day}`;
+  return (a ? `${a}` : '') + day;
+}
+function removeTrain(no){
+  const p = picked.get(no); if (!p) return;
+  p.layers.forEach(l => map.removeLayer(l)); if (p.stopLayer) map.removeLayer(p.stopLayer); if (p.midLayer) map.removeLayer(p.midLayer);
+  picked.delete(no); if (activeNo === no) activeNo = null; refreshLabels();
+  renderPicked(); save();
+}
+function focusTrain(no, fit = true){
+  const p = picked.get(no); if (!p) return;
+  activeNo = no;
+  p.layers.forEach(l => l.bringToFront());
+  if (fit) map.fitBounds(L.latLngBounds(p.ll), { padding:[40,40], maxZoom:10 });
+  document.querySelectorAll('.card').forEach(el => el.classList.toggle('active', el.dataset.no === no));
+  document.querySelector(`.card[data-no="${CSS.escape(no)}"]`)?.scrollIntoView({ block:'nearest' });
+}
+function save(){ store.set('irm-picked', [...picked.values()].map(p => [p.train.no, p.color])); }
+
+const ICON_FIT = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M2 6V2h4M14 6V2h-4M2 10v4h4M14 10v4h-4"/></svg>';
+const ICON_X = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 4l8 8M12 4l-8 8"/></svg>';
+function renderPicked(){
+  const box = $('#picked');
+  $('#count').textContent = picked.size;
+  if (!picked.size){ box.innerHTML = `<div class="empty-state">No trains on the map yet. Search above by number (12951) or name (Rajdhani, Chennai Mail). Each train you pick gets its own colour.</div>`; return; }
+  const open = new Set([...box.querySelectorAll('details[open]')].map(d => d.dataset.no));
+  box.innerHTML = [...picked.values()].reverse().map(p => {
+    const t = p.train;
+    const stops = p.stops ? p.stops.length : null;
+    const list = p.stops ? p.stops.map(s => { const v = ST[s.c]; return `<li data-c="${esc(s.c)}"><span class="dot"></span><span>${esc(v ? v[0] : s.c)}<span class="code">${esc(s.c)}</span></span><span class="t">${stopTimes(s)}</span></li>`; }).join('') : '';
+    return `<div class="card${activeNo===t.no?' active':''}" data-no="${esc(t.no)}" style="--c:${p.color}" tabindex="0">
+      <span class="swatch"></span>
+      <div class="title"><span class="num">${esc(t.no)}</span>${esc(t.nm)}</div>
+      <div class="actions"><button class="icon-btn" data-act="fit" aria-label="Zoom to ${esc(t.nm)}" title="Zoom to route">${ICON_FIT}</button><button class="icon-btn" data-act="rm" aria-label="Remove ${esc(t.nm)}" title="Remove">${ICON_X}</button></div>
+      <div class="meta">${esc(t.fr)} → ${esc(t.to)}</div>
+      <div class="facts"><span class="tag">${esc(TYPES[t.ty]||t.ty||'Train')}</span>${t.km?`<span>${t.km.toLocaleString('en-IN')} km</span>`:''}${t.dp?`<span>Dep ${esc(t.dp)}</span>`:''}${t.ar?`<span>Arr ${esc(t.ar)}</span>`:''}${stops?`<span>${stops} stops</span>`:''}</div>
+      ${p.stops ? `<details class="stops" data-no="${esc(t.no)}"${open.has(t.no)?' open':''}><summary>Show stops</summary><ul class="stoplist">${list}</ul></details>` : ''}
+    </div>`;
+  }).join('');
+}
+$('#picked').addEventListener('click', e => {
+  const card = e.target.closest('.card'); if (!card) return;
+  const no = card.dataset.no, btn = e.target.closest('button');
+  if (btn?.dataset.act === 'rm') return removeTrain(no);
+  if (btn?.dataset.act === 'fit') return focusTrain(no);
+  const li = e.target.closest('.stoplist li');
+  if (li){ const v = ST[li.dataset.c]; if (v && v.length >= 4) map.setView([v[3], v[2]], Math.max(map.getZoom(), 10)); return; }
+  if (e.target.closest('summary')) return;
+  focusTrain(no);
+});
+$('#picked').addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.classList.contains('card')) focusTrain(e.target.dataset.no); });
+$('#clear').addEventListener('click', () => { [...picked.keys()].forEach(removeTrain); fitIndia(); });
+
+// ---------- theme ----------
+function retheme(){
+  if (window.__net) drawNetwork(window.__net);
+  if (stationLayer){ const on = map.hasLayer(stationLayer); map.removeLayer(stationLayer); buildStations(); if (on) stationLayer.addTo(map); }
+  for (const p of picked.values()){
+    p.layers[0].setStyle({ color:css('--casing') });
+    p.midLayer?.eachLayer(m => m.setStyle({ fillColor:css('--casing') }));
+  }
+}
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change', retheme);
+new MutationObserver(retheme).observe(document.documentElement, { attributes:true, attributeFilter:['data-theme'] });
+
+// ---------- load ----------
+const getJ = u => fetch(u).then(r => { if (!r.ok) throw new Error(u + ' ' + r.status); return r.json(); });
+Promise.all([getJ('network.json'), getJ('trains.json')]).then(([n, t]) => {
+  window.__net = n.net; window.__speed = n.speed; ST = n.st;
+  setMode(mode);
+  buildStations(); zoomLayers();
+  TRAINS = t.t; TRAINS.forEach(tr => { tr._n = norm(tr.nm); tr._s = norm(tr.no+' '+tr.nm+' '+tr.fr+' '+tr.to); BYNO.set(tr.no, tr); });
+  $('#hstats').innerHTML = `<b>${TRAINS.length.toLocaleString('en-IN')}</b> trains · <b>${Object.values(ST).filter(v=>v.length>=4).length.toLocaleString('en-IN')}</b> stations`;
+  $('#loading').hidden = true;
+  const saved = store.get('irm-picked');
+  const start = Array.isArray(saved) ? saved : EXAMPLES.filter(no => BYNO.has(no)).map(no => [no]);
+  start.forEach(([no, c]) => addTrain(no, false, c));
+  renderPicked();
+}).catch(err => { $('#loading').textContent = 'The rail data did not load. Reload the page to try again.'; console.error(err); });
+})();
+</script>
+
+</body>
+</html>
